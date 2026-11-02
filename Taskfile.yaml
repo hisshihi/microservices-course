@@ -4,8 +4,9 @@ version: '3'
 #  Универсальный Taskfile для Go-сервисов (Go 1.27+)
 # =============================================================================
 #
-#  Под конкретный сервис обычно правятся только APP и, при необходимости,
-#  PROTO_DIR / PB_DIR / MAIN_BRANCH.
+#  Сервис выбирается через SERVICE (по умолчанию order):
+#    task default SERVICE=payment
+#  PROTO_DIR / PB_DIR / MAIN_BRANCH настраиваются под проект.
 #
 #  Быстрый старт:
 #    task tools                   поставить инструменты нужных версий в ./bin
@@ -30,8 +31,10 @@ dotenv: [ '.env' ]
 
 vars:
   # ------------------------------------------------------------ проект ---
-  APP: simple_bank
-  CMD: ./cmd/{{.APP}}
+  SERVICE: order
+  SERVICE_DIR: '{{.ROOT_DIR}}/{{.SERVICE}}'
+  APP: '{{.SERVICE}}'
+  CMD: ./cmd
   BIN_DIR: '{{.ROOT_DIR}}/bin'
   APP_BIN: '{{.BIN_DIR}}/{{.APP}}'
   PROTO_DIR: internal/api/proto
@@ -43,10 +46,12 @@ vars:
   GOLANGCI_LINT_VERSION: 2.15.0
   GOOSE_VERSION: 3.29.0
   BUF_VERSION: 1.75.0
+  OGEN_VERSION: 1.24.0
 
   GOLANGCI_LINT: '{{.BIN_DIR}}/golangci-lint'
   GOOSE: '{{.BIN_DIR}}/goose'
   BUF: '{{.BIN_DIR}}/buf'
+  OGEN: '{{.BIN_DIR}}/ogen'
 
   GO_VERSION:
     sh: go env GOVERSION
@@ -94,13 +99,14 @@ tasks:
 
   tools:
     desc: Установить инструменты в ./bin (уже установленные нужной версии пропускаются)
-    deps: [ tools:golangci-lint, tools:goose, tools:buf ]
+    deps: [ tools:golangci-lint, tools:goose, tools:buf, tools:ogen ]
     cmds:
       - '{{.STEP}} "Инструменты в ./bin"'
       - |
         {{.OK}} "$(printf '%-15s %s' golangci-lint v{{.GOLANGCI_LINT_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' goose v{{.GOOSE_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' buf v{{.BUF_VERSION}})"
+        {{.OK}} "$(printf '%-15s %s' ogen v{{.OGEN_VERSION}})"
         {{.INFO}} "собраны под {{.GO_VERSION}}"
 
   tools:golangci-lint:
@@ -130,6 +136,14 @@ tasks:
       - task: _install
         vars: { NAME: buf, VERSION: '{{.BUF_VERSION}}', PKG: github.com/bufbuild/buf/cmd/buf }
 
+  tools:ogen:
+    internal: true
+    status:
+      - '{{.OGEN}} --version 2>/dev/null | grep -qF "{{.OGEN_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: ogen, VERSION: '{{.OGEN_VERSION}}', PKG: github.com/ogen-go/ogen/cmd/ogen }
+
   _install:
     internal: true
     requires:
@@ -142,65 +156,85 @@ tasks:
   # ======================================================= code quality ===
 
   fmt:
+    dir: '{{.SERVICE_DIR}}'
     desc: Форматирование (форматтеры из секции formatters в .golangci.yml)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "fmt"'
-      - '{{.GOLANGCI_LINT}} fmt'
+      - '{{.GOLANGCI_LINT}} fmt --config {{.ROOT_DIR}}/.golangci.yaml'
       - '{{.OK}} "код отформатирован"'
 
   lint:
-    desc: Линтер по всему проекту
+    dir: '{{.SERVICE_DIR}}'
+    desc: Линтер выбранного сервиса
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint"'
-      - '{{.GOLANGCI_LINT}} run {{.CLI_ARGS}}'
+      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml {{.CLI_ARGS}}'
       - '{{.OK}} "замечаний нет"'
 
   lint:fix:
+    dir: '{{.SERVICE_DIR}}'
     desc: Линтер с автофиксом
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint --fix"'
-      - '{{.GOLANGCI_LINT}} run --fix'
+      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --fix'
       - '{{.OK}} "автофиксы применены, остальное — руками"'
 
   lint:dupl:
+    dir: '{{.SERVICE_DIR}}'
     desc: Поиск дублирования кода (не блокирует пуш — в основной набор не входит)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "dupl"'
-      - '{{.GOLANGCI_LINT}} run --enable-only dupl {{.CLI_ARGS}}'
+      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --enable-only dupl {{.CLI_ARGS}}'
       - '{{.OK}} "крупных дублей нет"'
 
   lint:new:
+    dir: '{{.SERVICE_DIR}}'
     desc: Линтер только по изменениям относительно {{.MAIN_BRANCH}} (для legacy-кода)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint (новый код относительно {{.MAIN_BRANCH}})"'
-      - '{{.GOLANGCI_LINT}} run --new-from-merge-base={{.MAIN_BRANCH}}'
+      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --new-from-merge-base={{.MAIN_BRANCH}}'
       - '{{.OK}} "в новом коде замечаний нет"'
 
   # ============================================================== tests ===
 
   test:
+    dir: '{{.SERVICE_DIR}}'
     desc: 'Тесты с race detector — task test -- -run TestName'
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "test (-race)"'
       - go test -race -count=1 ./... {{.CLI_ARGS}}
       - '{{.OK}} "тесты прошли"'
 
   test:stress:
+    dir: '{{.SERVICE_DIR}}'
     desc: 'Многократный прогон — ловит флаки и гонки (task test:stress COUNT=20)'
     vars:
       COUNT: '{{.COUNT | default 100}}'
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "test x{{.COUNT}} (-race)"'
       - go test -race -count={{.COUNT}} ./... {{.CLI_ARGS}}
       - '{{.OK}} "{{.COUNT}} прогонов без падений"'
 
   test:cover:
+    dir: '{{.SERVICE_DIR}}'
     desc: Покрытие — coverage.out и coverage.html
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "test (coverage)"'
       - go test -race -count=1 -coverprofile=coverage.out ./...
@@ -211,6 +245,7 @@ tasks:
   # ======================================================== build / run ===
 
   gen:
+    dir: '{{.SERVICE_DIR}}'
     desc: go generate (моки и т.п.)
     cmds:
       - '{{.STEP}} "go generate"'
@@ -218,31 +253,52 @@ tasks:
       - '{{.OK}} "сгенерировано"'
 
   tidy:
+    dir: '{{.SERVICE_DIR}}'
     desc: go mod tidy
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "go mod tidy"'
       - go mod tidy
       - '{{.OK}} "go.mod / go.sum в порядке"'
 
   build:
+    dir: '{{.SERVICE_DIR}}'
     desc: Сборка бинарника в ./bin
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "build {{.CMD}}"'
       - CGO_ENABLED=0 go build -trimpath -o {{.APP_BIN}} {{.CMD}}
       - '{{.OK}} "bin/{{.APP}} ($(du -h {{.APP_BIN}} | cut -f1))"'
 
   run:
+    dir: '{{.SERVICE_DIR}}'
     desc: Запуск приложения (переменные из .env)
+    requires:
+      vars:
+        - name: SERVICE
+          enum: [ order, payment, inventory ]
     cmds:
       - '{{.STEP}} "run {{.CMD}}"'
       - go run {{.CMD}} {{.CLI_ARGS}}
 
   clean:
+    dir: '{{.SERVICE_DIR}}'
     desc: Удалить собранный бинарник и отчёты покрытия (инструменты в ./bin остаются)
     cmds:
       - '{{.STEP}} "clean"'
       - rm -f {{.APP_BIN}} coverage.out coverage.html
       - '{{.OK}} "удалено: bin/{{.APP}}, coverage.*"'
+
+  ogen:
+    desc: Сгенерировать код из OpenAPI
+    cmds:
+      - '{{.OGEN}} --config shared/api/order/v1/.ogen.yaml --clean --package orderv1 --target pkg/openapi/order/v1 shared/api/order/v1/order.openapi.yaml'
 
   # ========================================================= migrations ===
   # goose читает из .env: GOOSE_DRIVER, GOOSE_DBSTRING, GOOSE_MIGRATION_DIR

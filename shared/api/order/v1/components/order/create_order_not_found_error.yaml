@@ -1,0 +1,13 @@
+type: object
+
+required: ["code", "message"]
+
+properties:
+  code:
+    type: string
+    example: "detail_not_found"
+    description: Код ошибки
+  message:
+    type: string
+    example: "Деталь не найдена"
+    description: Сообщение об ошибке на русском в человекочитаемом формате

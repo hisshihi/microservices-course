@@ -2,7 +2,7 @@ post:
   tags:
     - Order
   summary: Создать заказ
-  description: Создаёт заказ из выбранных пользователем заказов
+  description: Создаёт заказ из выбранных пользователем деталей
   operationId: createOrder
 
   requestBody:
@@ -10,7 +10,7 @@ post:
     content:
       application/json:
         schema:
-          $ref: "../../components/create_order_request.yaml"
+          $ref: "../../components/order/create_order_request.yaml"
 
   responses:
     '201':
@@ -18,10 +18,24 @@ post:
       content:
         application/json:
           schema:
-            $ref: ../../components/create_order_response.yaml
+            $ref: ../../components/order/create_order_response.yaml
     '404':
       description: Деталь не найдена
       content:
         application/json:
           schema:
-            $ref: "../../components/create_order_not_found_error.yaml"
+            $ref: "../../components/order/create_order_not_found_error.yaml"
+
+    '400':
+      description: Данные запроса переданы не верно
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/create_order_bad_request_error.yaml"
+
+    '500':
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/create_order_internal_error.yaml"

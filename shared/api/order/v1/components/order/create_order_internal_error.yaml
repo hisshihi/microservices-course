@@ -1,0 +1,13 @@
+type: object
+
+required: ["code", "message"]
+
+properties:
+  code:
+    type: string
+    example: "internal_error"
+    description: Код ошибки
+  message:
+    type: string
+    example: "Внутренняя ошибка сервера"
+    description: Сообщение об ошибке на русском в человекочитаемом формате
