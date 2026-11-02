@@ -1,0 +1,27 @@
+post:
+  tags:
+    - Order
+  summary: Создать заказ
+  description: Создаёт заказ из выбранных пользователем заказов
+  operationId: createOrder
+
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/create_order_request.yaml"
+
+  responses:
+    '201':
+      description: Заказ успешно создан
+      content:
+        application/json:
+          schema:
+            $ref: ../../components/create_order_response.yaml
+    '404':
+      description: Деталь не найдена
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/create_order_not_found_error.yaml"

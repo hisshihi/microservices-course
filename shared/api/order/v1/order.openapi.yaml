@@ -1,0 +1,13 @@
+openapi: 3.0.3
+info:
+  title: OrderService API
+  description: OrderService API
+  version: 1.0.0
+
+tags:
+  - name: Order
+    description: "Управление заказами"
+
+paths:
+  /api/v1/orders:
+    $ref: "./path/v1/orders.yaml"

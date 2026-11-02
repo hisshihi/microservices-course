@@ -1,0 +1,380 @@
+version: '3'
+
+# =============================================================================
+#  Универсальный Taskfile для Go-сервисов (Go 1.27+)
+# =============================================================================
+#
+#  Под конкретный сервис обычно правятся только APP и, при необходимости,
+#  PROTO_DIR / PB_DIR / MAIN_BRANCH.
+#
+#  Быстрый старт:
+#    task tools                   поставить инструменты нужных версий в ./bin
+#    task                         fmt + lint + test + build (проверка перед пушем)
+#    task --list                  все задачи с описаниями
+#
+#  Аргументы:
+#    task test -- -run TestOrder  всё после "--" уходит в CLI_ARGS
+#    task test:stress COUNT=20    переопределение переменной
+#    task migrate:down -y         без подтверждения
+#
+#  Вывод:
+#    ==> шаг     [ ok ] успех     [skip] пропущено     [FAIL] ошибка
+#    Цвета отключаются переменной окружения NO_COLOR=1 (https://no-color.org).
+#
+#  Переменные из .env подхватываются всеми задачами (dotenv ниже),
+#  уже выставленные в окружении значения не перетираются.
+# =============================================================================
+
+silent: true
+dotenv: [ '.env' ]
+
+vars:
+  # ------------------------------------------------------------ проект ---
+  APP: simple_bank
+  CMD: ./cmd/{{.APP}}
+  BIN_DIR: '{{.ROOT_DIR}}/bin'
+  APP_BIN: '{{.BIN_DIR}}/{{.APP}}'
+  PROTO_DIR: internal/api/proto
+  PB_DIR: internal/api/pb
+  MAIN_BRANCH: main
+
+  # ----------------------------------------------------------- версии ---
+  # Без префикса "v" — так их удобнее сверять с выводом `version`.
+  GOLANGCI_LINT_VERSION: 2.15.0
+  GOOSE_VERSION: 3.29.0
+  BUF_VERSION: 1.75.0
+
+  GOLANGCI_LINT: '{{.BIN_DIR}}/golangci-lint'
+  GOOSE: '{{.BIN_DIR}}/goose'
+  BUF: '{{.BIN_DIR}}/buf'
+
+  GO_VERSION:
+    sh: go env GOVERSION
+
+  # ------------------------------------------------------------- вывод ---
+  # Escape-последовательности хранятся как текст и интерпретируются printf.
+  C_RST: '{{if not .NO_COLOR}}\033[0m{{end}}'
+  C_B: '{{if not .NO_COLOR}}\033[1m{{end}}'
+  C_DIM: '{{if not .NO_COLOR}}\033[2m{{end}}'
+  C_CYAN: '{{if not .NO_COLOR}}\033[1;36m{{end}}'
+  C_GREEN: '{{if not .NO_COLOR}}\033[1;32m{{end}}'
+  C_YELLOW: '{{if not .NO_COLOR}}\033[1;33m{{end}}'
+  C_RED: '{{if not .NO_COLOR}}\033[1;31m{{end}}'
+
+  # Использование в cmds:  - '{{.STEP}} "текст"'
+  STEP: printf '\n{{.C_CYAN}}==>{{.C_RST}} {{.C_B}}%s{{.C_RST}}\n'
+  OK: printf '{{.C_GREEN}}[ ok ]{{.C_RST}} %s\n'
+  SKIP: printf '{{.C_YELLOW}}[skip]{{.C_RST}} %s\n'
+  FAIL: printf '{{.C_RED}}[FAIL]{{.C_RST}} %s\n'
+  INFO: printf '{{.C_DIM}}       %s{{.C_RST}}\n'
+
+tasks:
+  default:
+    desc: Проверка перед пушем — fmt, lint, test, build
+    vars:
+      START:
+        sh: date +%s
+    cmds:
+      - |
+        printf '{{.C_DIM}},------------------------------------------------------{{.C_RST}}\n'
+        printf '{{.C_DIM}}|{{.C_RST}}  {{.C_B}}%s{{.C_RST}}  ::  pre-push check\n' "{{.APP}}"
+        printf '{{.C_DIM}}|{{.C_RST}}  {{.C_DIM}}%s  %s/%s  branch: %s{{.C_RST}}\n' \
+          "{{.GO_VERSION}}" "{{OS}}" "{{ARCH}}" "$(git branch --show-current 2>/dev/null || echo '-')"
+        printf "{{.C_DIM}}\`------------------------------------------------------{{.C_RST}}\n"
+      - defer: |
+          ELAPSED=$(( $(date +%s) - {{.START}} ))
+          echo
+          {{if .EXIT_CODE}}{{.FAIL}} "pre-push check провален за ${ELAPSED}s"{{else}}{{.OK}} "всё зелёное за ${ELAPSED}s — можно пушить"{{end}}
+      - task: fmt
+      - task: lint
+      - task: test
+      - task: build
+
+  # ============================================================== tools ===
+
+  tools:
+    desc: Установить инструменты в ./bin (уже установленные нужной версии пропускаются)
+    deps: [ tools:golangci-lint, tools:goose, tools:buf ]
+    cmds:
+      - '{{.STEP}} "Инструменты в ./bin"'
+      - |
+        {{.OK}} "$(printf '%-15s %s' golangci-lint v{{.GOLANGCI_LINT_VERSION}})"
+        {{.OK}} "$(printf '%-15s %s' goose v{{.GOOSE_VERSION}})"
+        {{.OK}} "$(printf '%-15s %s' buf v{{.BUF_VERSION}})"
+        {{.INFO}} "собраны под {{.GO_VERSION}}"
+
+  tools:golangci-lint:
+    internal: true
+    # Второй status — пересборка после обновления Go: линтер, собранный
+    # старой версией Go, не понимает новый синтаксис и течёт по памяти.
+    status:
+      - '{{.GOLANGCI_LINT}} version 2>/dev/null | grep -qF "{{.GOLANGCI_LINT_VERSION}}"'
+      - '{{.GOLANGCI_LINT}} version 2>/dev/null | grep -qF "{{.GO_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: golangci-lint, VERSION: '{{.GOLANGCI_LINT_VERSION}}', PKG: github.com/golangci/golangci-lint/v2/cmd/golangci-lint }
+
+  tools:goose:
+    internal: true
+    status:
+      - '{{.GOOSE}} -version 2>/dev/null | grep -qF "{{.GOOSE_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: goose, VERSION: '{{.GOOSE_VERSION}}', PKG: github.com/pressly/goose/v3/cmd/goose }
+
+  tools:buf:
+    internal: true
+    status:
+      - '{{.BUF}} --version 2>/dev/null | grep -qF "{{.BUF_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: buf, VERSION: '{{.BUF_VERSION}}', PKG: github.com/bufbuild/buf/cmd/buf }
+
+  _install:
+    internal: true
+    requires:
+      vars: [ NAME, VERSION, PKG ]
+    cmds:
+      - '{{.STEP}} "Установка {{.NAME}} v{{.VERSION}}"'
+      - GOBIN={{.BIN_DIR}} go install {{.PKG}}@v{{.VERSION}}
+      - '{{.OK}} "{{.NAME}} v{{.VERSION}} -> bin/{{.NAME}}"'
+
+  # ======================================================= code quality ===
+
+  fmt:
+    desc: Форматирование (форматтеры из секции formatters в .golangci.yml)
+    deps: [ tools:golangci-lint ]
+    cmds:
+      - '{{.STEP}} "fmt"'
+      - '{{.GOLANGCI_LINT}} fmt'
+      - '{{.OK}} "код отформатирован"'
+
+  lint:
+    desc: Линтер по всему проекту
+    deps: [ tools:golangci-lint ]
+    cmds:
+      - '{{.STEP}} "lint"'
+      - '{{.GOLANGCI_LINT}} run {{.CLI_ARGS}}'
+      - '{{.OK}} "замечаний нет"'
+
+  lint:fix:
+    desc: Линтер с автофиксом
+    deps: [ tools:golangci-lint ]
+    cmds:
+      - '{{.STEP}} "lint --fix"'
+      - '{{.GOLANGCI_LINT}} run --fix'
+      - '{{.OK}} "автофиксы применены, остальное — руками"'
+
+  lint:dupl:
+    desc: Поиск дублирования кода (не блокирует пуш — в основной набор не входит)
+    deps: [ tools:golangci-lint ]
+    cmds:
+      - '{{.STEP}} "dupl"'
+      - '{{.GOLANGCI_LINT}} run --enable-only dupl {{.CLI_ARGS}}'
+      - '{{.OK}} "крупных дублей нет"'
+
+  lint:new:
+    desc: Линтер только по изменениям относительно {{.MAIN_BRANCH}} (для legacy-кода)
+    deps: [ tools:golangci-lint ]
+    cmds:
+      - '{{.STEP}} "lint (новый код относительно {{.MAIN_BRANCH}})"'
+      - '{{.GOLANGCI_LINT}} run --new-from-merge-base={{.MAIN_BRANCH}}'
+      - '{{.OK}} "в новом коде замечаний нет"'
+
+  # ============================================================== tests ===
+
+  test:
+    desc: 'Тесты с race detector — task test -- -run TestName'
+    cmds:
+      - '{{.STEP}} "test (-race)"'
+      - go test -race -count=1 ./... {{.CLI_ARGS}}
+      - '{{.OK}} "тесты прошли"'
+
+  test:stress:
+    desc: 'Многократный прогон — ловит флаки и гонки (task test:stress COUNT=20)'
+    vars:
+      COUNT: '{{.COUNT | default 100}}'
+    cmds:
+      - '{{.STEP}} "test x{{.COUNT}} (-race)"'
+      - go test -race -count={{.COUNT}} ./... {{.CLI_ARGS}}
+      - '{{.OK}} "{{.COUNT}} прогонов без падений"'
+
+  test:cover:
+    desc: Покрытие — coverage.out и coverage.html
+    cmds:
+      - '{{.STEP}} "test (coverage)"'
+      - go test -race -count=1 -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - '{{.OK}} "покрытие: $(go tool cover -func=coverage.out | awk ''END {print $NF}'')"'
+      - '{{.INFO}} "отчёт: coverage.html"'
+
+  # ======================================================== build / run ===
+
+  gen:
+    desc: go generate (моки и т.п.)
+    cmds:
+      - '{{.STEP}} "go generate"'
+      - go generate ./...
+      - '{{.OK}} "сгенерировано"'
+
+  tidy:
+    desc: go mod tidy
+    cmds:
+      - '{{.STEP}} "go mod tidy"'
+      - go mod tidy
+      - '{{.OK}} "go.mod / go.sum в порядке"'
+
+  build:
+    desc: Сборка бинарника в ./bin
+    cmds:
+      - '{{.STEP}} "build {{.CMD}}"'
+      - CGO_ENABLED=0 go build -trimpath -o {{.APP_BIN}} {{.CMD}}
+      - '{{.OK}} "bin/{{.APP}} ($(du -h {{.APP_BIN}} | cut -f1))"'
+
+  run:
+    desc: Запуск приложения (переменные из .env)
+    cmds:
+      - '{{.STEP}} "run {{.CMD}}"'
+      - go run {{.CMD}} {{.CLI_ARGS}}
+
+  clean:
+    desc: Удалить собранный бинарник и отчёты покрытия (инструменты в ./bin остаются)
+    cmds:
+      - '{{.STEP}} "clean"'
+      - rm -f {{.APP_BIN}} coverage.out coverage.html
+      - '{{.OK}} "удалено: bin/{{.APP}}, coverage.*"'
+
+  # ========================================================= migrations ===
+  # goose читает из .env: GOOSE_DRIVER, GOOSE_DBSTRING, GOOSE_MIGRATION_DIR
+
+  migrate:up:
+    desc: Накатить все миграции
+    deps: [ tools:goose ]
+    preconditions: &goose_env
+      - sh: test -n "$GOOSE_DRIVER" && test -n "$GOOSE_DBSTRING"
+        msg: GOOSE_DRIVER / GOOSE_DBSTRING не заданы — проверь .env
+    cmds:
+      - '{{.STEP}} "migrate up"'
+      - '{{.GOOSE}} up'
+      - '{{.OK}} "миграции накачены"'
+
+  migrate:down:
+    desc: Откатить последнюю миграцию
+    deps: [ tools:goose ]
+    prompt: Откатить последнюю миграцию?
+    preconditions: *goose_env
+    cmds:
+      - '{{.STEP}} "migrate down"'
+      - '{{.GOOSE}} down'
+      - '{{.OK}} "последняя миграция откачена"'
+
+  migrate:status:
+    desc: Статус миграций
+    deps: [ tools:goose ]
+    preconditions: *goose_env
+    cmds:
+      - '{{.STEP}} "migrate status"'
+      - '{{.GOOSE}} status'
+
+  migrate:create:
+    desc: 'Новая миграция — task migrate:create -- add_sessions'
+    deps: [ tools:goose ]
+    # requires тут не подходит: CLI_ARGS определена всегда, просто пустая.
+    preconditions:
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: 'укажи имя миграции — task migrate:create -- add_sessions'
+    cmds:
+      - '{{.STEP}} "migrate create {{.CLI_ARGS}}"'
+      - '{{.GOOSE}} create {{.CLI_ARGS}} sql'
+
+  # ============================================================== proto ===
+
+  proto:
+    desc: Генерация protobuf и gRPC кода
+    deps: [ tools:buf ]
+    preconditions:
+      - sh: test -f buf.yaml && test -f buf.gen.yaml
+        msg: нет buf.yaml / buf.gen.yaml в корне проекта
+      - sh: test -n "{{.PB_DIR}}" && test "{{.PB_DIR}}" != "/" && test "{{.PB_DIR}}" != "."
+        msg: PB_DIR пустой или указывает на корень — rm -rf отказывается
+    # Без sources/generates задача выполнялась бы всегда; с ними — только
+    # если что-то поменялось. Глобы ограничены каталогами, а не **/*.proto
+    # по всему репо, чтобы fingerprinting не обходил bin/, vendor/ и т.п.
+    sources:
+      - '{{.PROTO_DIR}}/**/*.proto'
+      - buf.yaml
+      - buf.gen.yaml
+    generates:
+      - '{{.PB_DIR}}/**/*.go'
+    cmds:
+      - '{{.STEP}} "buf generate"'
+      - rm -rf {{.PB_DIR}}
+      - '{{.BUF}} generate'
+      - '{{.OK}} "{{.PROTO_DIR}} -> {{.PB_DIR}}"'
+
+  proto:lint:
+    desc: Линтер proto-файлов
+    deps: [ tools:buf ]
+    cmds:
+      - '{{.STEP}} "buf lint"'
+      - '{{.BUF}} lint'
+      - '{{.OK}} "proto без замечаний"'
+
+  proto:breaking:
+    desc: Проверка ломающих изменений относительно {{.MAIN_BRANCH}}
+    deps: [ tools:buf ]
+    cmds:
+      - '{{.STEP}} "buf breaking (vs {{.MAIN_BRANCH}})"'
+      - "{{.BUF}} breaking --against '.git#branch={{.MAIN_BRANCH}}'"
+      - '{{.OK}} "обратная совместимость контрактов сохранена"'
+
+# =============================================================================
+#  Как добавить новую задачу
+# =============================================================================
+#
+#  1) Задача без внешних инструментов — просто команда + оформление вывода:
+#
+#     vuln:
+#       desc: Проверка зависимостей на известные уязвимости
+#       cmds:
+#         - '{{.STEP}} "govulncheck"'
+#         - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+#         - '{{.OK}} "уязвимостей не найдено"'
+#
+#  2) Задача со своим инструментом (пример — генерация HTTP-кода из OpenAPI
+#     через ogen). Инструмент ставится в ./bin с закреплённой версией:
+#
+#     vars:
+#       OGEN_VERSION: 1.x.y                        # версия без "v"
+#       OGEN: '{{.BIN_DIR}}/ogen'
+#       OPENAPI_SPEC: api/openapi/service.yaml
+#       OPENAPI_OUT: internal/api/oas
+#
+#     tools:ogen:
+#       internal: true
+#       status:                                    # true -> установка пропускается
+#         - '{{.OGEN}} --version 2>/dev/null | grep -qF "{{.OGEN_VERSION}}"'
+#       cmds:
+#         - task: _install
+#           vars: { NAME: ogen, VERSION: '{{.OGEN_VERSION}}', PKG: github.com/ogen-go/ogen/cmd/ogen }
+#
+#     openapi:
+#       desc: Генерация кода из OpenAPI
+#       deps: [ tools:ogen ]
+#       sources: [ '{{.OPENAPI_SPEC}}' ]           # пересобирать только при изменениях
+#       generates: [ '{{.OPENAPI_OUT}}/**/*.go' ]
+#       cmds:
+#         - '{{.STEP}} "ogen"'
+#         - '{{.OGEN}} --target {{.OPENAPI_OUT}} --package oas --clean {{.OPENAPI_SPEC}}'
+#         - '{{.OK}} "{{.OPENAPI_SPEC}} -> {{.OPENAPI_OUT}}"'
+#
+#     И добавить tools:ogen в deps задачи `tools` + строку в её сводку.
+#
+#  Полезное:
+#    - internal: true      — скрыть служебную задачу из task --list
+#    - deps                — выполняются параллельно ДО cmds
+#    - task: <name>        — внутри cmds выполняется последовательно
+#    - preconditions       — проверка с понятным msg вместо падения посреди команды
+#    - prompt              — подтверждение для опасных действий (обходится флагом -y)
+#    - {{.CLI_ARGS}}       — всё, что передано после "--"
+# =============================================================================
