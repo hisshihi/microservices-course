@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -107,13 +108,20 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 	save, err := h.orderStorage.Save(req.UserUUID.String(), parts)
 	if err != nil {
 		log.Printf("Ошибка при сохранении заказа: %v\n", err)
-		return &orderv1.CreateOrderInternalError{
-			Code:    "internal_error",
-			Message: "Ошибка при сохранении заказа",
-		}, nil
+		return nil, h.NewError(ctx, err)
 	}
 
 	return &orderv1.CreateOrderResponse{OrderUUID: save.OrderUUID, TotalPrice: float32(save.TotalPrice)}, nil
+}
+
+func (h *OrderHandler) NewError(_ context.Context, err error) *orderv1.GenericErrorStatusCode {
+	return &orderv1.GenericErrorStatusCode{
+		StatusCode: http.StatusInternalServerError,
+		Response: orderv1.GenericError{
+			Code:    orderv1.NewOptString("internal_error"),
+			Message: orderv1.NewOptString(fmt.Sprintf("Ошибка при выполнении запроса: %v", err)),
+		},
+	}
 }
 
 func main() {

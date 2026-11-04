@@ -39,3 +39,19 @@ post:
         application/json:
           schema:
             $ref: "../../components/order/errors/create_order_internal_error.yaml"
+
+    default:
+      description: Неизвестная ошибка
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/errors/generic_error.yaml"
+
+#get:
+#  tags:
+#    - Order
+#  summary: Получить заказ
+#  description: Получить заказ по его идентификатору
+#  operationId: getOrder
+#
+#

@@ -14,6 +14,10 @@ type Handler interface {
 	//
 	// POST /api/v1/orders
 	CreateOrder(ctx context.Context, req *CreateOrderRequest) (CreateOrderRes, error)
+	// NewError creates *GenericErrorStatusCode from error returned by handler.
+	//
+	// Used for common default response.
+	NewError(ctx context.Context, err error) *GenericErrorStatusCode
 }
 
 // Server implements http server based on OpenAPI v3 specification and

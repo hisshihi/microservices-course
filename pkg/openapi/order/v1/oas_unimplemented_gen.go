@@ -21,3 +21,11 @@ var _ Handler = UnimplementedHandler{}
 func (UnimplementedHandler) CreateOrder(ctx context.Context, req *CreateOrderRequest) (r CreateOrderRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
+
+// NewError creates *GenericErrorStatusCode from error returned by handler.
+//
+// Used for common default response.
+func (UnimplementedHandler) NewError(ctx context.Context, err error) (r *GenericErrorStatusCode) {
+	r = new(GenericErrorStatusCode)
+	return r
+}
