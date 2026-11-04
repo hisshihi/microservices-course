@@ -1,0 +1,36 @@
+type: object
+required:
+  - user_uuid
+  - order_uuid
+  - part_uuids
+  - total_price
+  - status
+properties:
+  user_uuid:
+    type: string
+    format: uuid
+    description: UUID юзера оформившего заказ
+  order_uuid:
+    type: string
+    format: uuid
+    description: UUID заказа
+  part_uuids:
+    type: array
+    minItems: 1
+    items:
+      type: string
+      format: uuid
+  total_price:
+    type: number
+    format: float
+    description: Итоговая цена
+  transaction_uuid:
+    type: string
+    format: uuid
+    description: UUID проведённой транзакции
+  payment_method:
+    type: string
+    description: Способ оплаты
+  status:
+    type: string
+    description: Статус заказа

@@ -7,7 +7,6 @@ required:
 properties:
   order_uuid:
     type: string
-    format: uuid
     description: UUID созданного заказа
     example: "01a19193-94b5-7060-99ac-09b193cee68c"
 

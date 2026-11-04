@@ -24,18 +24,18 @@ post:
       content:
         application/json:
           schema:
-            $ref: "../../components/order/create_order_not_found_error.yaml"
+            $ref: "../../components/order/errors/create_order_not_found_error.yaml"
 
     '400':
       description: Данные запроса переданы не верно
       content:
         application/json:
           schema:
-            $ref: "../../components/order/create_order_bad_request_error.yaml"
+            $ref: "../../components/order/errors/create_order_bad_request_error.yaml"
 
     '500':
       description: Внутренняя ошибка сервера
       content:
         application/json:
           schema:
-            $ref: "../../components/order/create_order_internal_error.yaml"
+            $ref: "../../components/order/errors/create_order_internal_error.yaml"

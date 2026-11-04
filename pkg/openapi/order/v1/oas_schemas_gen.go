@@ -130,13 +130,13 @@ func (s *CreateOrderRequest) SetPartUuids(val []uuid.UUID) {
 // Ref: #
 type CreateOrderResponse struct {
 	// UUID созданного заказа.
-	OrderUUID uuid.UUID `json:"order_uuid"`
+	OrderUUID string `json:"order_uuid"`
 	// Сумма заказа.
 	TotalPrice float32 `json:"total_price"`
 }
 
 // GetOrderUUID returns the value of OrderUUID.
-func (s *CreateOrderResponse) GetOrderUUID() uuid.UUID {
+func (s *CreateOrderResponse) GetOrderUUID() string {
 	return s.OrderUUID
 }
 
@@ -146,7 +146,7 @@ func (s *CreateOrderResponse) GetTotalPrice() float32 {
 }
 
 // SetOrderUUID sets the value of OrderUUID.
-func (s *CreateOrderResponse) SetOrderUUID(val uuid.UUID) {
+func (s *CreateOrderResponse) SetOrderUUID(val string) {
 	s.OrderUUID = val
 }
 

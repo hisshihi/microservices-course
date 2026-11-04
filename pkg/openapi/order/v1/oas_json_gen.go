@@ -488,7 +488,7 @@ func (s *CreateOrderResponse) Encode(e *jx.Encoder) {
 func (s *CreateOrderResponse) encodeFields(e *jx.Encoder) {
 	{
 		e.FieldStart("order_uuid")
-		json.EncodeUUID(e, s.OrderUUID)
+		e.Str(s.OrderUUID)
 	}
 	{
 		e.FieldStart("total_price")
@@ -513,8 +513,8 @@ func (s *CreateOrderResponse) Decode(d *jx.Decoder) error {
 		case "order_uuid":
 			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
-				v, err := json.DecodeUUID(d)
-				s.OrderUUID = v
+				v, err := d.Str()
+				s.OrderUUID = string(v)
 				if err != nil {
 					return err
 				}
