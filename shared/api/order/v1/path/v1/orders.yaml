@@ -46,12 +46,3 @@ post:
         application/json:
           schema:
             $ref: "../../components/order/errors/generic_error.yaml"
-
-#get:
-#  tags:
-#    - Order
-#  summary: Получить заказ
-#  description: Получить заказ по его идентификатору
-#  operationId: getOrder
-#
-#
