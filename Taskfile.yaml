@@ -300,6 +300,22 @@ tasks:
     cmds:
       - '{{.OGEN}} --config shared/api/order/v1/.ogen.yaml --clean --package orderv1 --target pkg/openapi/order/v1 shared/api/order/v1/order.openapi.yaml'
 
+  fix:
+    dir: '{{.SERVICE_DIR}}'
+    desc: 'Применить автоматические исправления'
+    cmds:
+      - '{{.STEP}} "go fix"'
+      - go fix ./...
+      - '{{.OK}} "автофиксы применены в директории, остальное — руками"'
+
+  fix:diff:
+    dir: '{{.SERVICE_DIR}}'
+    desc: 'Посмотреть предложенные исправления'
+    cmds:
+      - '{{.STEP}} "diff (fix)"'
+      - go fix -diff ./...
+      - '{{.OK}} "предложенные исправления"'
+
   # ========================================================= migrations ===
   # goose читает из .env: GOOSE_DRIVER, GOOSE_DBSTRING, GOOSE_MIGRATION_DIR
 
