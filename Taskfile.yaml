@@ -47,11 +47,15 @@ vars:
   GOOSE_VERSION: 3.29.0
   BUF_VERSION: 1.75.0
   OGEN_VERSION: 1.24.0
+  PROTOC_GEN_GO_VERSION: 1.36.12
+  PROTOC_GEN_GO_GRPC_VERSION: 1.6.2
 
   GOLANGCI_LINT: '{{.BIN_DIR}}/golangci-lint'
   GOOSE: '{{.BIN_DIR}}/goose'
   BUF: '{{.BIN_DIR}}/buf'
   OGEN: '{{.BIN_DIR}}/ogen'
+  PROTOC_GEN_GO: '{{.BIN_DIR}}/protoc-gen-go'
+  PROTOC_GEN_GO_GRPC: '{{.BIN_DIR}}/protoc-gen-go-grpc'
 
   GO_VERSION:
     sh: go env GOVERSION
@@ -99,7 +103,7 @@ tasks:
 
   tools:
     desc: Установить инструменты в ./bin (уже установленные нужной версии пропускаются)
-    deps: [ tools:golangci-lint, tools:goose, tools:buf, tools:ogen ]
+    deps: [ tools:golangci-lint, tools:goose, tools:buf, tools:ogen, tools:protoc-gen-go, tools:protoc-gen-go-grpc ]
     cmds:
       - '{{.STEP}} "Инструменты в ./bin"'
       - |
@@ -107,6 +111,8 @@ tasks:
         {{.OK}} "$(printf '%-15s %s' goose v{{.GOOSE_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' buf v{{.BUF_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' ogen v{{.OGEN_VERSION}})"
+        {{.OK}} "$(printf '%-19s %s' protoc-gen-go v{{.PROTOC_GEN_GO_VERSION}})"
+        {{.OK}} "$(printf '%-19s %s' protoc-gen-go-grpc v{{.PROTOC_GEN_GO_GRPC_VERSION}})"
         {{.INFO}} "собраны под {{.GO_VERSION}}"
 
   tools:golangci-lint:
@@ -143,6 +149,22 @@ tasks:
     cmds:
       - task: _install
         vars: { NAME: ogen, VERSION: '{{.OGEN_VERSION}}', PKG: github.com/ogen-go/ogen/cmd/ogen }
+
+  tools:protoc-gen-go:
+    internal: true
+    status:
+      - 'test "$("{{.PROTOC_GEN_GO}}" --version 2>/dev/null)" = "protoc-gen-go v{{.PROTOC_GEN_GO_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: protoc-gen-go, VERSION: '{{.PROTOC_GEN_GO_VERSION}}', PKG: google.golang.org/protobuf/cmd/protoc-gen-go }
+
+  tools:protoc-gen-go-grpc:
+    internal: true
+    status:
+      - 'test "$("{{.PROTOC_GEN_GO_GRPC}}" --version 2>/dev/null)" = "protoc-gen-go-grpc {{.PROTOC_GEN_GO_GRPC_VERSION}}"'
+    cmds:
+      - task: _install
+        vars: { NAME: protoc-gen-go-grpc, VERSION: '{{.PROTOC_GEN_GO_GRPC_VERSION}}', PKG: google.golang.org/grpc/cmd/protoc-gen-go-grpc }
 
   _install:
     internal: true
@@ -298,7 +320,7 @@ tasks:
   ogen:
     desc: Сгенерировать код из OpenAPI
     cmds:
-      - '{{.OGEN}} --config shared/api/order/v1/.ogen.yaml --clean --package orderv1 --target pkg/openapi/order/v1 shared/api/order/v1/order.openapi.yaml'
+      - '{{.OGEN}} --config shared/api/order/v1/.ogen.yaml --clean --package orderv1 --target shared/pkg/openapi/order/v1 shared/api/order/v1/order.openapi.yaml'
 
   fix:
     dir: '{{.SERVICE_DIR}}'
@@ -362,13 +384,37 @@ tasks:
   # ============================================================== proto ===
 
   proto:
-    desc: Генерация protobuf и gRPC кода
-    deps: [ tools:buf ]
+    desc: Генерация protobuf и gRPC кода (совместимый вызов proto:gen)
+    cmds:
+      - task: proto:gen
+
+  # Для локальной генерации в buf.gen.yaml укажи:
+  # plugins:
+  #   - local: protoc-gen-go
+  #     out: internal/api/pb
+  #     opt: paths=source_relative
+  #   - local: protoc-gen-go-grpc
+  #     out: internal/api/pb
+  #     opt: paths=source_relative
+  # Пути out согласуй с PB_DIR. proto:gen добавляет ./bin в PATH.
+  # При remote-плагинах Buf локальные бинарники не нужны.
+  proto:install-plugins:
+    desc: Установить плагины Go и gRPC в ./bin (нужные версии пропускаются)
+    deps: [ tools:protoc-gen-go, tools:protoc-gen-go-grpc ]
+    cmds:
+      - '{{.OK}} "protoc-gen-go v{{.PROTOC_GEN_GO_VERSION}} / protoc-gen-go-grpc v{{.PROTOC_GEN_GO_GRPC_VERSION}} -> ./bin"'
+
+  # Очистка выходных каталогов настраивается через clean: true в buf.gen.yaml.
+  # Buf очищает пути out плагинов; отдельная очистка в Taskfile не нужна.
+  proto:gen:
+    desc: Генерация protobuf и gRPC кода через Buf
+    deps: [ tools:buf, proto:install-plugins ]
+    dir: '{{.ROOT_DIR}}'
+    env:
+      PATH: '{{.BIN_DIR}}{{if eq OS "windows"}};{{else}}:{{end}}{{.PATH}}'
     preconditions:
       - sh: test -f buf.yaml && test -f buf.gen.yaml
         msg: нет buf.yaml / buf.gen.yaml в корне проекта
-      - sh: test -n "{{.PB_DIR}}" && test "{{.PB_DIR}}" != "/" && test "{{.PB_DIR}}" != "."
-        msg: PB_DIR пустой или указывает на корень — rm -rf отказывается
     # Без sources/generates задача выполнялась бы всегда; с ними — только
     # если что-то поменялось. Глобы ограничены каталогами, а не **/*.proto
     # по всему репо, чтобы fingerprinting не обходил bin/, vendor/ и т.п.
@@ -376,11 +422,14 @@ tasks:
       - '{{.PROTO_DIR}}/**/*.proto'
       - buf.yaml
       - buf.gen.yaml
+      - Taskfile*.yml
+      - Taskfile*.yaml
+      - '{{.PROTOC_GEN_GO}}'
+      - '{{.PROTOC_GEN_GO_GRPC}}'
     generates:
       - '{{.PB_DIR}}/**/*.go'
     cmds:
       - '{{.STEP}} "buf generate"'
-      - rm -rf {{.PB_DIR}}
       - '{{.BUF}} generate'
       - '{{.OK}} "{{.PROTO_DIR}} -> {{.PB_DIR}}"'
 
@@ -391,6 +440,7 @@ tasks:
       - '{{.STEP}} "buf lint"'
       - '{{.BUF}} lint'
       - '{{.OK}} "proto без замечаний"'
+
 
   proto:breaking:
     desc: Проверка ломающих изменений относительно {{.MAIN_BRANCH}}

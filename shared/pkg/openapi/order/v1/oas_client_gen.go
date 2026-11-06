@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/ogen-go/ogen/conv"
 	ht "github.com/ogen-go/ogen/http"
 	"github.com/ogen-go/ogen/otelogen"
 	"github.com/ogen-go/ogen/uri"
@@ -33,6 +34,12 @@ type Invoker interface {
 	//
 	// POST /api/v1/orders
 	CreateOrder(ctx context.Context, request *CreateOrderRequest) (CreateOrderRes, error)
+	// GetOrderByUUID invokes getOrderByUUID operation.
+	//
+	// Получить информацию о заказе по его UUID.
+	//
+	// GET /api/v1/orders/{order_uuid}
+	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error)
 }
 
 // Client implements OAS client.
@@ -150,6 +157,104 @@ func (c *Client) sendCreateOrder(ctx context.Context, request *CreateOrderReques
 
 	stage = "DecodeResponse"
 	result, err := decodeCreateOrderResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetOrderByUUID invokes getOrderByUUID operation.
+//
+// Получить информацию о заказе по его UUID.
+//
+// GET /api/v1/orders/{order_uuid}
+func (c *Client) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error) {
+	res, err := c.sendGetOrderByUUID(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendGetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (res *Order, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getOrderByUUID"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/orders/{order_uuid}"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetOrderByUUIDOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [2]string
+	pathParts[0] = "/api/v1/orders/"
+	{
+		// Encode "order_uuid" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "order_uuid",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.UUIDToString(params.OrderUUID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetOrderByUUIDResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

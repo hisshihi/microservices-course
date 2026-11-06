@@ -68,6 +68,19 @@ func encodeCreateOrderResponse(response CreateOrderRes, w http.ResponseWriter, s
 	}
 }
 
+func encodeGetOrderByUUIDResponse(response *Order, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeErrorResponse(response *GenericErrorStatusCode, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	code := response.StatusCode

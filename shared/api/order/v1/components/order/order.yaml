@@ -29,8 +29,6 @@ properties:
     format: uuid
     description: UUID проведённой транзакции
   payment_method:
-    type: string
-    description: Способ оплаты
+    $ref: './enums/payment_method_enum.yaml'
   status:
-    type: string
-    description: Статус заказа
+    $ref: './enums/status_enum.yaml'

@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-faster/errors"
-	orderv1 "github.com/hisshihi/microservices-course/pkg/openapi/order/v1"
+	orderv1 "github.com/hisshihi/microservices-course/shared/pkg/openapi/order/v1"
 )
 
 const (
@@ -29,23 +29,23 @@ const (
 type Status string
 
 const (
-	PendingPayment Status = "pending_payment"
-	Paid           Status = "paid"
-	Cancelled      Status = "cancelled"
+	PendingPayment Status = "PENDING_PAYMENT"
+	Paid           Status = "PAID"
+	Cancelled      Status = "CANCELLED"
 )
 
 func (s Status) String() string {
 	return string(s)
 }
 
-type PaymentMethod uint8
+type PaymentMethod string
 
 const (
-	Unknown PaymentMethod = iota
-	Card
-	SBP
-	CreditCard
-	InvestorMoney
+	Unknown       PaymentMethod = "UNKNOWN"
+	Card          PaymentMethod = "CARD"
+	SBP           PaymentMethod = "SBP"
+	CreditCard    PaymentMethod = "CREDIT_CARD"
+	InvestorMoney PaymentMethod = "INVESTOR_MONEY"
 )
 
 func (s PaymentMethod) String() string {
@@ -112,6 +112,11 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 	}
 
 	return &orderv1.CreateOrderResponse{OrderUUID: save.OrderUUID, TotalPrice: float32(save.TotalPrice)}, nil
+}
+
+func (h *OrderHandler) GetOrderByUUID(ctx context.Context, params orderv1.GetOrderByUUIDParams) (*orderv1.Order, error) {
+	// todo: реализовать позже
+	return nil, nil
 }
 
 func (h *OrderHandler) NewError(_ context.Context, err error) *orderv1.GenericErrorStatusCode {

@@ -22,6 +22,15 @@ func (UnimplementedHandler) CreateOrder(ctx context.Context, req *CreateOrderReq
 	return r, ht.ErrNotImplemented
 }
 
+// GetOrderByUUID implements getOrderByUUID operation.
+//
+// Получить информацию о заказе по его UUID.
+//
+// GET /api/v1/orders/{order_uuid}
+func (UnimplementedHandler) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (r *Order, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // NewError creates *GenericErrorStatusCode from error returned by handler.
 //
 // Used for common default response.

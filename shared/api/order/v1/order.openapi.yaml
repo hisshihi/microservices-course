@@ -11,3 +11,5 @@ tags:
 paths:
   /api/v1/orders:
     $ref: "./path/v1/orders.yaml"
+  /api/v1/orders/{order_uuid}:
+    $ref: './path/v1/order_by_uuid.yaml'

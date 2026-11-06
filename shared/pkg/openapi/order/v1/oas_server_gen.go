@@ -14,6 +14,12 @@ type Handler interface {
 	//
 	// POST /api/v1/orders
 	CreateOrder(ctx context.Context, req *CreateOrderRequest) (CreateOrderRes, error)
+	// GetOrderByUUID implements getOrderByUUID operation.
+	//
+	// Получить информацию о заказе по его UUID.
+	//
+	// GET /api/v1/orders/{order_uuid}
+	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error)
 	// NewError creates *GenericErrorStatusCode from error returned by handler.
 	//
 	// Used for common default response.

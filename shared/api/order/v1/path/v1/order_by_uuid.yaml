@@ -1,0 +1,28 @@
+get:
+  tags:
+    - Order
+  summary: Получить заказ
+  description: Получить информацию о заказе по его UUID
+  operationId: getOrderByUUID
+  parameters:
+    - name: order_uuid
+      in: path
+      required: true
+      description: UUID заказа
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    '200':
+      description: Информация о заказе успешно получена
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/order.yaml"
+    default:
+      description: Неизвестная ошибка
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/errors/generic_error.yaml"
