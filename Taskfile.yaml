@@ -230,7 +230,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "test (-race)"'
       - go test -race -count=1 ./... {{.CLI_ARGS}}
@@ -244,7 +244,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "test x{{.COUNT}} (-race)"'
       - go test -race -count={{.COUNT}} ./... {{.CLI_ARGS}}
@@ -256,7 +256,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "test (coverage)"'
       - go test -race -count=1 -coverprofile=coverage.out ./...
@@ -280,7 +280,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "go mod tidy"'
       - go mod tidy
@@ -292,7 +292,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "build {{.CMD}}"'
       - CGO_ENABLED=0 go build -trimpath -o {{.APP_BIN}} {{.CMD}}
@@ -304,7 +304,7 @@ tasks:
     requires:
       vars:
         - name: SERVICE
-          enum: [ order, payment, inventory ]
+          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "run {{.CMD}}"'
       - go run {{.CMD}} {{.CLI_ARGS}}
