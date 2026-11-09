@@ -39,7 +39,7 @@ type Invoker interface {
 	// Получить информацию о заказе по его UUID.
 	//
 	// GET /api/v1/orders/{order_uuid}
-	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error)
+	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (GetOrderByUUIDRes, error)
 }
 
 // Client implements OAS client.
@@ -169,12 +169,12 @@ func (c *Client) sendCreateOrder(ctx context.Context, request *CreateOrderReques
 // Получить информацию о заказе по его UUID.
 //
 // GET /api/v1/orders/{order_uuid}
-func (c *Client) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error) {
+func (c *Client) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (GetOrderByUUIDRes, error) {
 	res, err := c.sendGetOrderByUUID(ctx, params)
 	return res, err
 }
 
-func (c *Client) sendGetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (res *Order, err error) {
+func (c *Client) sendGetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (res GetOrderByUUIDRes, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("getOrderByUUID"),
 		semconv.HTTPRequestMethodKey.String("GET"),

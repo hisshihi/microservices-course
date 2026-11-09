@@ -276,7 +276,7 @@ func (s *Server) handleGetOrderByUUIDRequest(args [1]string, argsEscaped bool, w
 
 	var rawBody []byte
 
-	var response *Order
+	var response GetOrderByUUIDRes
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
@@ -297,7 +297,7 @@ func (s *Server) handleGetOrderByUUIDRequest(args [1]string, argsEscaped bool, w
 		type (
 			Request  = struct{}
 			Params   = GetOrderByUUIDParams
-			Response = *Order
+			Response = GetOrderByUUIDRes
 		)
 		response, err = middleware.HookMiddleware[
 			Request,

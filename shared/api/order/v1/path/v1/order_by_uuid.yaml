@@ -20,6 +20,18 @@ get:
         application/json:
           schema:
             $ref: "../../components/order/order.yaml"
+    '404':
+      description: Заказ не найден
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/errors/get_order_not_found.yaml"
+    '400':
+      description: Невалидные переданные данные
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/order/errors/create_order_bad_request_error.yaml"
     default:
       description: Неизвестная ошибка
       content:

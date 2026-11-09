@@ -42,7 +42,8 @@ func (s *CreateOrderBadRequestError) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*CreateOrderBadRequestError) createOrderRes() {}
+func (*CreateOrderBadRequestError) createOrderRes()    {}
+func (*CreateOrderBadRequestError) getOrderByUUIDRes() {}
 
 // Ref: #
 type CreateOrderInternalError struct {
@@ -217,6 +218,37 @@ func (s *GenericErrorStatusCode) SetStatusCode(val int) {
 func (s *GenericErrorStatusCode) SetResponse(val GenericError) {
 	s.Response = val
 }
+
+// Ref: #
+type GetOrderNotFound struct {
+	// Код ошибки.
+	Code string `json:"code"`
+	// Сообщение об ошибке на русском в человекочитаемом
+	// формате.
+	Message string `json:"message"`
+}
+
+// GetCode returns the value of Code.
+func (s *GetOrderNotFound) GetCode() string {
+	return s.Code
+}
+
+// GetMessage returns the value of Message.
+func (s *GetOrderNotFound) GetMessage() string {
+	return s.Message
+}
+
+// SetCode sets the value of Code.
+func (s *GetOrderNotFound) SetCode(val string) {
+	s.Code = val
+}
+
+// SetMessage sets the value of Message.
+func (s *GetOrderNotFound) SetMessage(val string) {
+	s.Message = val
+}
+
+func (*GetOrderNotFound) getOrderByUUIDRes() {}
 
 // NewOptPaymentMethodEnum returns new OptPaymentMethodEnum with value set to v.
 func NewOptPaymentMethodEnum(v PaymentMethodEnum) OptPaymentMethodEnum {
@@ -440,6 +472,8 @@ func (s *Order) SetPaymentMethod(val OptPaymentMethodEnum) {
 func (s *Order) SetStatus(val StatusEnum) {
 	s.Status = val
 }
+
+func (*Order) getOrderByUUIDRes() {}
 
 // Способ оплаты.
 // Ref: #

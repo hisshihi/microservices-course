@@ -19,7 +19,7 @@ type Handler interface {
 	// Получить информацию о заказе по его UUID.
 	//
 	// GET /api/v1/orders/{order_uuid}
-	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (*Order, error)
+	GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (GetOrderByUUIDRes, error)
 	// NewError creates *GenericErrorStatusCode from error returned by handler.
 	//
 	// Used for common default response.

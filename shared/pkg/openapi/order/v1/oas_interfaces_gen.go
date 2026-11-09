@@ -4,3 +4,7 @@ package orderv1
 type CreateOrderRes interface {
 	createOrderRes()
 }
+
+type GetOrderByUUIDRes interface {
+	getOrderByUUIDRes()
+}

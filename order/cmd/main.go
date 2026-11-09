@@ -16,8 +16,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	googleuuid "github.com/google/uuid"
 	orderv1 "github.com/hisshihi/microservices-course/shared/pkg/openapi/order/v1"
 )
+
+var ErrOrderNotFound = errors.New("order with uuid not found")
 
 const (
 	httpAddr          = "8080"
@@ -53,11 +56,11 @@ func (s PaymentMethod) String() string {
 }
 
 type Order struct {
-	UserUUID        string         `json:"user_uuid"`
-	OrderUUID       string         `json:"order_uuid"`
-	PartUUIDs       []string       `json:"part_uuids"`
+	UserUUID        uuid.UUID      `json:"user_uuid"`
+	OrderUUID       uuid.UUID      `json:"order_uuid"`
+	PartUUIDs       []uuid.UUID    `json:"part_uuids"`
 	TotalPrice      float64        `json:"total_price"`
-	TransactionUUID *string        `json:"transaction_uuid"` // Только если оплачено
+	TransactionUUID *uuid.UUID     `json:"transaction_uuid"` // Только если оплачено
 	PaymentMethod   *PaymentMethod `json:"payment_method"`
 	Status          Status         `json:"status"`
 }
@@ -73,23 +76,70 @@ func NewOrderStorage() *OrderStorage {
 	}
 }
 
-func (s *OrderStorage) Save(userUUID string, partUUIDs []string) (Order, error) {
+func (s *OrderStorage) Save(userUUID uuid.UUID, partUUIDs []uuid.UUID) (*Order, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	order, ok := s.order[userUUID]
+	order, ok := s.order[userUUID.String()]
 	if ok {
 		order.PartUUIDs = append(order.PartUUIDs, partUUIDs...)
 		order.Status = PendingPayment
-		return *order, nil
+		return order, nil
 	}
 	order = &Order{
 		UserUUID:  userUUID,
-		OrderUUID: uuid.NewV7().String(),
+		OrderUUID: uuid.NewV7(),
 		PartUUIDs: partUUIDs,
 		Status:    PendingPayment,
 	}
-	s.order[userUUID] = order
-	return *order, nil
+	s.order[order.OrderUUID.String()] = order
+	return order, nil
+}
+
+func (s *OrderStorage) Get(orderUUID string) (*Order, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, ok := s.order[orderUUID]
+	if !ok {
+		return nil, ErrOrderNotFound
+	}
+	return order, nil
+}
+
+func (s *OrderStorage) mapOrderStorageToOrderv1(orderUUIDStr string) (*orderv1.Order, error) {
+	order, err := s.Get(orderUUIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	googleUUIDs := make([]googleuuid.UUID, 0, len(order.PartUUIDs))
+	for _, partUUID := range order.PartUUIDs {
+		googleUUIDs = append(googleUUIDs, googleuuid.UUID(partUUID))
+	}
+
+	var transactionUUID orderv1.OptUUID
+	if order.TransactionUUID != nil {
+		transactionUUID = orderv1.OptUUID{Set: true, Value: googleuuid.UUID(*order.TransactionUUID)}
+	} else {
+		transactionUUID = orderv1.OptUUID{Set: false}
+	}
+
+	var paymentMethod orderv1.OptPaymentMethodEnum
+	if order.PaymentMethod != nil {
+		paymentMethodString := order.PaymentMethod.String()
+		paymentMethod = orderv1.OptPaymentMethodEnum{Set: true, Value: orderv1.PaymentMethodEnum(paymentMethodString)}
+	} else {
+		paymentMethod = orderv1.OptPaymentMethodEnum{Set: false}
+	}
+
+	return &orderv1.Order{
+		UserUUID:        googleuuid.UUID(order.UserUUID),
+		OrderUUID:       googleuuid.UUID(order.OrderUUID),
+		PartUuids:       googleUUIDs,
+		TotalPrice:      float32(order.TotalPrice),
+		TransactionUUID: transactionUUID,
+		PaymentMethod:   paymentMethod,
+		Status:          orderv1.StatusEnum(order.Status.String()),
+	}, nil
 }
 
 type OrderHandler struct {
@@ -101,22 +151,32 @@ func NewOrderHandler(orderStorage *OrderStorage) *OrderHandler {
 }
 
 func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrderRequest) (orderv1.CreateOrderRes, error) {
-	parts := make([]string, 0, len(req.GetPartUuids()))
+	parts := make([]uuid.UUID, 0, len(req.GetPartUuids()))
 	for _, part := range req.GetPartUuids() {
-		parts = append(parts, part.String())
+		parts = append(parts, uuid.UUID(part))
 	}
-	save, err := h.orderStorage.Save(req.UserUUID.String(), parts)
+	save, err := h.orderStorage.Save(uuid.UUID(req.UserUUID), parts)
 	if err != nil {
 		log.Printf("Ошибка при сохранении заказа: %v\n", err)
 		return nil, h.NewError(ctx, err)
 	}
 
-	return &orderv1.CreateOrderResponse{OrderUUID: save.OrderUUID, TotalPrice: float32(save.TotalPrice)}, nil
+	return &orderv1.CreateOrderResponse{OrderUUID: save.OrderUUID.String(), TotalPrice: float32(save.TotalPrice)}, nil
 }
 
-func (h *OrderHandler) GetOrderByUUID(ctx context.Context, params orderv1.GetOrderByUUIDParams) (*orderv1.Order, error) {
-	// todo: реализовать позже
-	return nil, nil
+func (h *OrderHandler) GetOrderByUUID(ctx context.Context, params orderv1.GetOrderByUUIDParams) (orderv1.GetOrderByUUIDRes, error) {
+	order, err := h.orderStorage.mapOrderStorageToOrderv1(params.OrderUUID.String())
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			return &orderv1.GetOrderNotFound{
+				Code:    "order_not_found",
+				Message: "Заказ не найден",
+			}, nil
+		}
+		return nil, h.NewError(ctx, err)
+	}
+
+	return order, nil
 }
 
 func (h *OrderHandler) NewError(_ context.Context, err error) *orderv1.GenericErrorStatusCode {

@@ -27,7 +27,7 @@ func (UnimplementedHandler) CreateOrder(ctx context.Context, req *CreateOrderReq
 // Получить информацию о заказе по его UUID.
 //
 // GET /api/v1/orders/{order_uuid}
-func (UnimplementedHandler) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (r *Order, _ error) {
+func (UnimplementedHandler) GetOrderByUUID(ctx context.Context, params GetOrderByUUIDParams) (r GetOrderByUUIDRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

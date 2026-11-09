@@ -1,0 +1,13 @@
+type: object
+
+required: ["code", "message"]
+
+properties:
+  code:
+    type: string
+    example: "order_not_found"
+    description: Код ошибки
+  message:
+    type: string
+    example: "Заказ не найден"
+    description: Сообщение об ошибке на русском в человекочитаемом формате

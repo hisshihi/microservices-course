@@ -9,3 +9,14 @@ Content-Type: application/json
     "{{$random.uuid}}"
   ]
 }
+
+> {%
+ client.test("Order created", function () {
+     client.assert(response.status == 201, "Expected 201");
+ });
+
+ client.global.set("order_uuid", response.body.order_uuid)
+ %}
+
+### GET получаем заказ по его UUID
+GET http://localhost:8080/api/v1/orders/{{order_uuid}}
