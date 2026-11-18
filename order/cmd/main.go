@@ -95,7 +95,7 @@ func (s *OrderStorage) Save(userUUID uuid.UUID, partUUIDs []uuid.UUID) (*Order, 
 	return order, nil
 }
 
-func (s *OrderStorage) Get(orderUUID string) (*Order, error) {
+func (s *OrderStorage) GetOrder(orderUUID string) (*Order, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	order, ok := s.order[orderUUID]
@@ -106,7 +106,7 @@ func (s *OrderStorage) Get(orderUUID string) (*Order, error) {
 }
 
 func (s *OrderStorage) mapOrderStorageToOrderv1(orderUUIDStr string) (*orderv1.Order, error) {
-	order, err := s.Get(orderUUIDStr)
+	order, err := s.GetOrder(orderUUIDStr)
 	if err != nil {
 		return nil, err
 	}
