@@ -4,9 +4,8 @@ version: '3'
 #  Универсальный Taskfile для Go-сервисов (Go 1.27+)
 # =============================================================================
 #
-#  Сервис выбирается через SERVICE (по умолчанию order):
-#    task default SERVICE=payment
-#  PROTO_DIR / PB_DIR / MAIN_BRANCH настраиваются под проект.
+#  Сервисы выбираются через MODULES, отдельный сервис для run — через MODULE.
+#  PROTO_DIR / PB_DIR / MAIN_BRANCH задаются при необходимости.
 #
 #  Быстрый старт:
 #    task tools                   поставить инструменты нужных версий в ./bin
@@ -31,12 +30,9 @@ dotenv: [ '.env' ]
 
 vars:
   # ------------------------------------------------------------ проект ---
-  SERVICE: order
-  SERVICE_DIR: '{{.ROOT_DIR}}/{{.SERVICE}}'
-  APP: '{{.SERVICE}}'
+  APP: microservices-course
   CMD: ./cmd
   BIN_DIR: '{{.ROOT_DIR}}/bin'
-  APP_BIN: '{{.BIN_DIR}}/{{.APP}}'
   PROTO_DIR: internal/api/proto
   PB_DIR: internal/api/pb
   MAIN_BRANCH: main
@@ -46,19 +42,21 @@ vars:
   GOLANGCI_LINT_VERSION: 2.15.0
   GOOSE_VERSION: 3.29.0
   BUF_VERSION: 1.75.0
-  OGEN_VERSION: 1.24.0
   PROTOC_GEN_GO_VERSION: 1.36.12
   PROTOC_GEN_GO_GRPC_VERSION: 1.6.2
 
   GOLANGCI_LINT: '{{.BIN_DIR}}/golangci-lint'
   GOOSE: '{{.BIN_DIR}}/goose'
   BUF: '{{.BIN_DIR}}/buf'
-  OGEN: '{{.BIN_DIR}}/ogen'
   PROTOC_GEN_GO: '{{.BIN_DIR}}/protoc-gen-go'
   PROTOC_GEN_GO_GRPC: '{{.BIN_DIR}}/protoc-gen-go-grpc'
 
   GO_VERSION:
     sh: go env GOVERSION
+
+  # Можно выбрать один или несколько сервисов: task test MODULES="order payment".
+  MODULES: order payment inventory
+  MODULE: order
 
   # ------------------------------------------------------------- вывод ---
   # Escape-последовательности хранятся как текст и интерпретируются printf.
@@ -103,14 +101,13 @@ tasks:
 
   tools:
     desc: Установить инструменты в ./bin (уже установленные нужной версии пропускаются)
-    deps: [ tools:golangci-lint, tools:goose, tools:buf, tools:ogen, tools:protoc-gen-go, tools:protoc-gen-go-grpc ]
+    deps: [ tools:golangci-lint, tools:goose, tools:buf, tools:protoc-gen-go, tools:protoc-gen-go-grpc ]
     cmds:
       - '{{.STEP}} "Инструменты в ./bin"'
       - |
         {{.OK}} "$(printf '%-15s %s' golangci-lint v{{.GOLANGCI_LINT_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' goose v{{.GOOSE_VERSION}})"
         {{.OK}} "$(printf '%-15s %s' buf v{{.BUF_VERSION}})"
-        {{.OK}} "$(printf '%-15s %s' ogen v{{.OGEN_VERSION}})"
         {{.OK}} "$(printf '%-19s %s' protoc-gen-go v{{.PROTOC_GEN_GO_VERSION}})"
         {{.OK}} "$(printf '%-19s %s' protoc-gen-go-grpc v{{.PROTOC_GEN_GO_GRPC_VERSION}})"
         {{.INFO}} "собраны под {{.GO_VERSION}}"
@@ -142,14 +139,6 @@ tasks:
       - task: _install
         vars: { NAME: buf, VERSION: '{{.BUF_VERSION}}', PKG: github.com/bufbuild/buf/cmd/buf }
 
-  tools:ogen:
-    internal: true
-    status:
-      - '{{.OGEN}} --version 2>/dev/null | grep -qF "{{.OGEN_VERSION}}"'
-    cmds:
-      - task: _install
-        vars: { NAME: ogen, VERSION: '{{.OGEN_VERSION}}', PKG: github.com/ogen-go/ogen/cmd/ogen }
-
   tools:protoc-gen-go:
     internal: true
     status:
@@ -178,165 +167,170 @@ tasks:
   # ======================================================= code quality ===
 
   fmt:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Форматирование (форматтеры из секции formatters в .golangci.yml)
+    desc: Форматирование (форматтеры из секции formatters в .golangci.yaml)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "fmt"'
-      - '{{.GOLANGCI_LINT}} fmt --config {{.ROOT_DIR}}/.golangci.yaml'
-      - '{{.OK}} "код отформатирован"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && "{{.GOLANGCI_LINT}}" fmt --config "{{.ROOT_DIR}}/.golangci.yaml") || exit $?
+          {{.OK}} "$module — код отформатирован"
+        done
 
   lint:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Линтер выбранного сервиса
+    desc: Линтер по всему проекту
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint"'
-      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml {{.CLI_ARGS}}'
-      - '{{.OK}} "замечаний нет"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && "{{.GOLANGCI_LINT}}" run {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — замечаний нет"
+        done
 
   lint:fix:
-    dir: '{{.SERVICE_DIR}}'
     desc: Линтер с автофиксом
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint --fix"'
-      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --fix'
-      - '{{.OK}} "автофиксы применены, остальное — руками"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && "{{.GOLANGCI_LINT}}" run --fix {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — автофиксы применены"
+        done
 
   lint:dupl:
-    dir: '{{.SERVICE_DIR}}'
     desc: Поиск дублирования кода (не блокирует пуш — в основной набор не входит)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "dupl"'
-      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --enable-only dupl {{.CLI_ARGS}}'
-      - '{{.OK}} "крупных дублей нет"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && "{{.GOLANGCI_LINT}}" run --enable-only dupl {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — крупных дублей нет"
+        done
 
   lint:new:
-    dir: '{{.SERVICE_DIR}}'
     desc: Линтер только по изменениям относительно {{.MAIN_BRANCH}} (для legacy-кода)
     deps: [ tools:golangci-lint ]
     cmds:
       - '{{.STEP}} "lint (новый код относительно {{.MAIN_BRANCH}})"'
-      - '{{.GOLANGCI_LINT}} run --config {{.ROOT_DIR}}/.golangci.yaml --new-from-merge-base={{.MAIN_BRANCH}}'
-      - '{{.OK}} "в новом коде замечаний нет"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && "{{.GOLANGCI_LINT}}" run --new-from-merge-base={{.MAIN_BRANCH}} {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — в новом коде замечаний нет"
+        done
+
+  fix:
+    desc: 'Применить автоматические исправления'
+    cmds:
+      - '{{.STEP}} "go fix"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go fix {{.CLI_ARGS}} ./...) || exit $?
+          {{.OK}} "$module — автофиксы применены, остальное — руками"
+        done
+
+  fix:diff:
+    desc: 'Посмотреть предложенные исправления'
+    cmds:
+      - '{{.STEP}} "diff (fix)"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go fix -diff {{.CLI_ARGS}} ./...) || exit $?
+          {{.OK}} "$module — просмотр исправлений завершён"
+        done
 
   # ============================================================== tests ===
 
   test:
-    dir: '{{.SERVICE_DIR}}'
     desc: 'Тесты с race detector — task test -- -run TestName'
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "test (-race)"'
-      - go test -race -count=1 ./... {{.CLI_ARGS}}
-      - '{{.OK}} "тесты прошли"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go test -race -count=1 ./... {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — тесты прошли"
+        done
 
   test:stress:
-    dir: '{{.SERVICE_DIR}}'
     desc: 'Многократный прогон — ловит флаки и гонки (task test:stress COUNT=20)'
     vars:
       COUNT: '{{.COUNT | default 100}}'
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "test x{{.COUNT}} (-race)"'
-      - go test -race -count={{.COUNT}} ./... {{.CLI_ARGS}}
-      - '{{.OK}} "{{.COUNT}} прогонов без падений"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go test -race -count={{.COUNT}} ./... {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — {{.COUNT}} прогонов без падений"
+        done
 
   test:cover:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Покрытие — coverage.out и coverage.html
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
+    desc: Покрытие — coverage.out и coverage.html в каждом модуле
     cmds:
       - '{{.STEP}} "test (coverage)"'
-      - go test -race -count=1 -coverprofile=coverage.out ./...
-      - go tool cover -html=coverage.out -o coverage.html
-      - '{{.OK}} "покрытие: $(go tool cover -func=coverage.out | awk ''END {print $NF}'')"'
-      - '{{.INFO}} "отчёт: coverage.html"'
+      - |
+        for module in {{.MODULES}}; do
+          (
+            cd "$module" || exit $?
+            go test -race -count=1 -coverprofile=coverage.out ./... {{.CLI_ARGS}} || exit $?
+            go tool cover -html=coverage.out -o coverage.html || exit $?
+            go tool cover -func=coverage.out
+          ) || exit $?
+          {{.OK}} "$module — отчёт: $module/coverage.html"
+        done
 
   # ======================================================== build / run ===
 
   gen:
-    dir: '{{.SERVICE_DIR}}'
     desc: go generate (моки и т.п.)
     cmds:
       - '{{.STEP}} "go generate"'
-      - go generate ./...
-      - '{{.OK}} "сгенерировано"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go generate {{.CLI_ARGS}} ./...) || exit $?
+          {{.OK}} "$module — сгенерировано"
+        done
 
   tidy:
-    dir: '{{.SERVICE_DIR}}'
     desc: go mod tidy
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
     cmds:
       - '{{.STEP}} "go mod tidy"'
-      - go mod tidy
-      - '{{.OK}} "go.mod / go.sum в порядке"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && go mod tidy {{.CLI_ARGS}}) || exit $?
+          {{.OK}} "$module — go.mod / go.sum в порядке"
+        done
 
   build:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Сборка бинарника в ./bin
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
+    desc: Сборка сервисов в ./bin/<модуль>
     cmds:
       - '{{.STEP}} "build {{.CMD}}"'
-      - CGO_ENABLED=0 go build -trimpath -o {{.APP_BIN}} {{.CMD}}
-      - '{{.OK}} "bin/{{.APP}} ($(du -h {{.APP_BIN}} | cut -f1))"'
+      - |
+        for module in {{.MODULES}}; do
+          (cd "$module" && CGO_ENABLED=0 go build -trimpath {{.CLI_ARGS}} -o "{{.BIN_DIR}}/$module" {{.CMD}}) || exit $?
+          {{.OK}} "$module — собран bin/$module"
+        done
 
   run:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Запуск приложения (переменные из .env)
-    requires:
-      vars:
-        - name: SERVICE
-          enum: [ order, payment, inventory, shared ]
+    desc: 'Запуск одного сервиса — task run MODULE=order (переменные из .env)'
+    dir: '{{.ROOT_DIR}}/{{.MODULE}}'
+    preconditions:
+      - sh: test -f go.mod && test -d "{{.CMD}}"
+        msg: 'В модуле {{.MODULE}} нет go.mod или {{.CMD}}'
     cmds:
-      - '{{.STEP}} "run {{.CMD}}"'
+      - '{{.STEP}} "run {{.MODULE}} {{.CMD}}"'
       - go run {{.CMD}} {{.CLI_ARGS}}
 
   clean:
-    dir: '{{.SERVICE_DIR}}'
-    desc: Удалить собранный бинарник и отчёты покрытия (инструменты в ./bin остаются)
+    desc: Удалить бинарники и отчёты покрытия выбранных модулей (инструменты остаются)
     cmds:
       - '{{.STEP}} "clean"'
-      - rm -f {{.APP_BIN}} coverage.out coverage.html
-      - '{{.OK}} "удалено: bin/{{.APP}}, coverage.*"'
-
-  ogen:
-    desc: Сгенерировать код из OpenAPI
-    cmds:
-      - '{{.OGEN}} --config shared/api/order/v1/.ogen.yaml --clean --package orderv1 --target shared/pkg/openapi/order/v1 shared/api/order/v1/order.openapi.yaml'
-
-  fix:
-    dir: '{{.SERVICE_DIR}}'
-    desc: 'Применить автоматические исправления'
-    cmds:
-      - '{{.STEP}} "go fix"'
-      - go fix ./...
-      - '{{.OK}} "автофиксы применены в директории, остальное — руками"'
-
-  fix:diff:
-    dir: '{{.SERVICE_DIR}}'
-    desc: 'Посмотреть предложенные исправления'
-    cmds:
-      - '{{.STEP}} "diff (fix)"'
-      - go fix -diff ./...
-      - '{{.OK}} "предложенные исправления"'
+      - |
+        for module in {{.MODULES}}; do
+          rm -f "{{.BIN_DIR}}/$module" "$module/coverage.out" "$module/coverage.html" || exit $?
+          {{.OK}} "$module — бинарник и отчёты покрытия удалены"
+        done
 
   # ========================================================= migrations ===
   # goose читает из .env: GOOSE_DRIVER, GOOSE_DBSTRING, GOOSE_MIGRATION_DIR
@@ -499,4 +493,3 @@ tasks:
 #    - preconditions       — проверка с понятным msg вместо падения посреди команды
 #    - prompt              — подтверждение для опасных действий (обходится флагом -y)
 #    - {{.CLI_ARGS}}       — всё, что передано после "--"
-# =============================================================================
