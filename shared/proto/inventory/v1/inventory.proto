@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/hisshihi/microservices-course/shared/pkg/proto/inventory/v1;inventoryv1";
+
+service InventoryService {
+  // GetPart возвращает информацию о детали по её UUID.
+  rpc GetPart(GetPartRequest) returns (GetPartResponse);
+  // ListParts возвращает список деталей с возможностью фильтрации.
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
+}
+
+// GetPartRequest запрос на получение детали.
+message GetPartRequest {
+  // Идентификатор детали.
+  string uuid = 1;
+}
+
+// GetPartResponse возвращает информацию о детали.
+message GetPartResponse {
+  Part part = 1;
+}
+
+// ListPartsRequest запрос на получение с фильтрацией
+message ListPartsRequest {
+  PartsFilter filter = 1;
+}
+
+// ListPartsResponse ответ на запрос получения деталей
+message ListPartsResponse {
+  repeated Part parts = 1;
+}
+
+
+enum Category {
+  // Неизвестная категория.
+  CATEGORY_UNSPECIFIED = 0;
+  // Двигатель.
+  CATEGORY_ENGINE = 1;
+  // Топливо.
+  CATEGORY_FUEL = 2;
+  // Иллюминатор.
+  CATEGORY_PORTHOLE = 3;
+  // Крыло.
+  CATEGORY_WING = 4;
+}
+
+// Размер детали.
+message Dimensions {
+  double length = 1;
+  double width = 2;
+  double height = 3;
+  double weight = 4;
+}
+
+// Информация о производителе.
+message Manufacturer {
+  string name = 1;
+  string country = 2;
+  string website = 3;
+}
+
+message Value {
+  string string_value = 1;
+  int64 int64_value = 2;
+  double double_value = 3;
+  bool bool_value = 4;
+}
+
+message Part {
+  // Уникальный идентификатор детали.
+  string uuid = 1;
+  // Название детали.
+  string name = 2;
+  // Описание детали.
+  string description = 3;
+  // Цена за единицу
+  double price = 4;
+  // Количество на складе.
+  int64 stock_quantity = 5;
+  Category category = 6;
+  Dimensions dimensions = 7;
+  Manufacturer manufacturer = 8;
+  repeated string tags = 9;
+  map<string, Value> metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+// Фильтр по деталям (все поля опциональны).
+message PartsFilter {
+  repeated string uuids = 1;
+  repeated string names = 2;
+  repeated Category categories = 3;
+  repeated string manufacturer_countries = 4;
+  repeated string tags = 5;
+}
